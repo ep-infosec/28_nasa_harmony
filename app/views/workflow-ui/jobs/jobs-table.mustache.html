@@ -1,0 +1,40 @@
+<table class="table table-sm">
+    <thead>
+        <tr class="align-middle">
+            <th scope="col">jobID</th>
+            {{#isAdminRoute}}
+            <th scope="col">user</th>
+            {{/isAdminRoute}}
+            <th scope="col">request</th>
+            <th scope="col">status</th>
+            <th scope="col">message</th>
+            <th scope="col" class="d-flex flex-row align-items-center"><div>granules</div>&nbsp;
+                <div class="d-flex flex-column">
+                {{{sortGranulesLinks}}}
+                </div>
+            </th>
+            <th scope="col">progress</th>
+            <th scope="col">createdAt</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{#jobs}}
+        <tr clas='job-table-row'>
+            <th scope="row"><a href="workflow-ui/{{jobID}}">{{jobID}}</a></th>
+            {{#isAdminRoute}}
+            <td>{{username}}</td>
+            {{/isAdminRoute}}
+            <td class="mw-40ch">
+                <span class="text-truncate d-block" title="{{request}}" data-bs-toggle="tooltip"
+                    data-bs-placement="right">{{jobUrl}}</span>
+            </td>
+            <td><span class="badge bg-{{jobBadge}}">{{status}}</span></td>
+            <td class="mw-40ch"><span class="text-truncate d-block" title="{{message}}" data-bs-toggle="tooltip"
+                    data-bs-placement="right">{{message}}</span></td>
+            <td>{{numInputGranules}}</td>
+            <td>{{progress}}%</td>
+            <td class="date-td" data-time="{{jobCreatedAt}}"></td>
+        </tr>
+        {{/jobs}}
+    </tbody>
+</table>

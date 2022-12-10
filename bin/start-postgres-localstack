@@ -1,0 +1,112 @@
+#!/bin/bash
+
+set -e
+
+SELF=$(basename $0)
+
+function usage
+{
+  echo "Usage: $SELF [-c|--context <kubernetes-context>] [-d|--driver <driver>] [port]"
+
+  echo "port must be a number"
+}
+
+CREATE=false
+
+while [[ $# -gt 0 ]]
+do
+key="$1"
+
+case $key in
+  -d|--driver)
+  DRIVER=$2
+  shift
+  shift
+  ;;
+  -c|--context)
+  KUBE_CONTEXT=$2
+  shift
+  shift
+  ;;
+  *)
+  PPORT="$1"
+  shift
+  ;;
+esac
+done
+
+
+# use docker driver as the default
+DRIVER_DEFAULT=docker
+
+DRIVER=${DRIVER:-$DRIVER_DEFAULT}
+
+source "env-defaults"
+source ".env"
+[[ -n $KUBERNETES_URL ]] && alias kubectl="kubectl -s $KUBERNETES_URL"
+
+if [ -n "$KUBE_CONTEXT" ]; then :
+elif kubectl config get-contexts docker-desktop &> /dev/null ; then
+  KUBE_CONTEXT='docker-desktop'
+elif command -v minikube &> /dev/null ; then
+  KUBE_CONTEXT='minikube'
+else
+  echo 'ERROR: Could not find an available Kubernetes context.' >&2
+  echo 'If you are using Docker Desktop, make sure it is running and Kubernetes is enabled.' >&2
+  echo 'If you are using minikube, make sure it is installed and in your PATH.' >&2
+  echo 'If you are using another Kubernetes, specify its context using --context.' >&2
+  exit 1
+fi
+
+echo "Using Kubernetes context \"$KUBE_CONTEXT\""
+
+if [[ "$KUBE_CONTEXT" == "minikube" ]]; then
+  echo "Starting minikube using driver \"$DRIVER\""
+
+  minikube start --driver="$DRIVER"
+
+  sleep 5
+fi
+kubectl config use-context $KUBE_CONTEXT
+
+harmony_namespace=$(kubectl get namespace | grep harmony | cut -d ' ' -f1)
+
+if [ -z "$harmony_namespace" ]; then
+  kubectl create namespace harmony
+fi
+
+STAGING_BUCKET=${STAGING_BUCKET:-local-staging-bucket}
+ARTIFACT_BUCKET=${ARTIFACT_BUCKET:-local-artifact-bucket}
+UPLOAD_BUCKET=${UPLOAD_BUCKET:-local-upload-bucket}
+
+# Creates buckets in localstack
+localstack_startup_script="
+awslocal s3 mb s3://${STAGING_BUCKET}
+awslocal s3 mb s3://${ARTIFACT_BUCKET}
+awslocal s3 mb s3://${UPLOAD_BUCKET}
+awslocal s3api put-bucket-acl --bucket ${ARTIFACT_BUCKET} --acl public-read" # allows us to view STAC files: localhost:4572/{ARTIFACT_BUCKET}/{jobId}/{workItemId}/outputs/
+
+
+# For some develpers using Linux, artifact repositories were not working correctly without
+# setting the default harmony account as a cluster admin
+kubectl -n harmony delete rolebinding default-admin 2>/dev/null || true
+kubectl -n harmony create rolebinding default-admin --clusterrole=admin --serviceaccount=harmony:default
+
+kubectl -n harmony delete configmap localstack-config 2>/dev/null || true
+kubectl -n harmony create configmap localstack-config --from-literal=startup.sh="${localstack_startup_script}"
+
+. ./bin/create-k8s-config-maps-and-secrets
+
+kubectl apply -n harmony -f ./config/local-postgres-localstack-deployment.yml
+
+[[ $USE_LOCALSTACK = 'true' ]] && s3_endpoint="localstack:4572" || s3_endpoint="s3.amazonaws.com"
+
+
+if [[ "$KUBE_CONTEXT" == "minikube" ]]; then
+  # Allow LoadBalancer services to be reached in minikube
+  minikube tunnel > /dev/null &
+fi
+
+echo ''
+echo 'Localstack has started at http://localhost:4566/'
+echo 'Postgres has started at localhost:5432'

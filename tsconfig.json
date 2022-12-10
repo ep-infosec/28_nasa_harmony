@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+      "module": "commonjs",
+      "baseUrl": ".",
+      "moduleResolution": "node",
+      "target": "ES2021",
+      "esModuleInterop": true,
+      "allowJs": true,
+      "noImplicitAny": false,
+      "resolveJsonModule": true,
+      "sourceMap": true,
+      "outDir": "built"
+  },
+  "include": ["./app/**/*", "./test/**/*", "./tasks/**/app/**/*"],
+  "exclude": ["./tasks/**/built/**/*"]
+}
